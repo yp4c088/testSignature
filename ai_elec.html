@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電錶辨識 (kWh & Room)</title>
+    <!-- 引入 Tesseract.js 核心庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        h1 { text-align: center; color: #333; }
+        #meter-container { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px; }
+        #meter-img { max-width: 100%; border: 1px solid #ddd; }
+        #room-label { font-size: 1.5em; font-weight: bold; padding: 5px; background-color: #f0f0f0; border-radius: 4px; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+        #result-box { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; display: none; }
+        .data-field { margin-bottom: 8px; }
+        .label { font-weight: bold; }
+        #raw-text { white-space: pre-wrap; font-family: monospace; }
+        #github-link { text-align: center; margin-top: 20px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <h1>電錶數據辨識</h1>
+
+    <div id="meter-container">
+        <!-- 電錶圖片及其周圍牆面 -->
+        <img id="meter-img" src="messageImage_1783042161693.jpg" alt="電錶圖片">
+        <!-- 模擬最下面的房間號 -->
+        <div id="room-label">R0602</div>
+        <button onclick="startOCR()">開始辨識</button>
+    </div>
+
+    <div id="result-box">
+        <h2>辨識結果</h2>
+        <div class="data-field"><span class="label">5位數度數 (kWh):</span> <span id="kwh-value">辨識中...</span></div>
+        <div class="data-field"><span class="label">房間號 (R-code):</span> <span id="room-value">辨識中...</span></div>
+        <hr>
+        <h3>完整原始文字</h3>
+        <p id="raw-text"></p>
+    </div>
+
+    <div id="github-link"><a href="https://github.com/Tesseract-Demo/electric-meter-ocr" target="_blank">查看 GitHub 專案庫</a></div>
+
+    <script>
+        // 設定圖片物件，此圖片為本專案的靜態資源
+        const imgElement = document.getElementById('meter-img');
+        const kwhValue = document.getElementById('kwh-value');
+        const roomValue = document.getElementById('room-value');
+        const resultBox = document.getElementById('result-box');
+        const rawText = document.getElementById('raw-text');
+
+        // 開始 OCR 辨識的函數
+        async function startOCR() {
+            // 顯示結果區域並初始化狀態
+            resultBox.style.display = 'block';
+            kwhValue.innerText = "辨識中...";
+            roomValue.innerText = "辨識中...";
+            rawText.innerText = "";
+
+            try {
+                // 使用 Tesseract.js 的核心 recognize 函數，設定多語言模式
+                const { data: { text } } = await Tesseract.recognize(
+                    imgElement,
+                    'eng+chi_tra', // 英文+繁體中文，適用於電錶標籤
+                    { logger: m => console.log(m) } // 在控制台顯示進度
+                );
+
+                // 將完整原始文字顯示在介面上
+                rawText.innerText = text;
+
+                // --- 資料擷取邏輯 ---
+
+                // 1. 擷取「5位數度數」: 尋找第一個符合連續5位數字的字串
+                const kwhMatch = text.match(/\b\d{5}\b/);
+                if (kwhMatch) {
+                    kwhValue.innerText = kwhMatch[0];
+                } else {
+                    kwhValue.innerText = "未找到符合格式的5位數";
+                }
+
+                // 2. 擷取「房間號」: 尋找最後一個最大的純數字區塊 (R0602的數字部分)
+                // 先過濾出純數字，然後選擇最後一個，這通常是房間號
+                const allNumbers = text.match(/\d+/g);
+                if (allNumbers && allNumbers.length > 0) {
+                    const lastNumberGroup = allNumbers[allNumbers.length - 1];
+                    // 在房間號前加上 'R'，重現原本的編碼結構
+                    roomValue.innerText = 'R' + lastNumberGroup; 
+                } else {
+                    roomValue.innerText = "未找到房間編號數字";
+                }
+
+            } catch (error) {
+                console.error("OCR 辨識發生錯誤:", error);
+                kwhValue.innerText = "辨識失敗";
+                roomValue.innerText = "辨識失敗";
+                rawText.innerText = "發生錯誤：\n" + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
