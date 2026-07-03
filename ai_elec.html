@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>電錶辨識 (kWh & Room)</title>
-    <!-- 引入 Tesseract.js 核心庫 -->
+    <title>電錶辨識 (支援檔案上傳)</title>
+    <!-- 引入 Tesseract.js -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
         h1 { text-align: center; color: #333; }
-        #meter-container { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px; }
-        #meter-img { max-width: 100%; border: 1px solid #ddd; }
-        #room-label { font-size: 1.5em; font-weight: bold; padding: 5px; background-color: #f0f0f0; border-radius: 4px; }
-        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+        #meter-container { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-bottom: 20px; }
+        #meter-img { max-width: 100%; max-height: 400px; border: 1px solid #ddd; display: none; /* 預設隱藏，上傳後顯示 */ }
+        .upload-area { margin-bottom: 10px; width: 100%; text-align: center; }
+        input[type="file"] { font-size: 16px; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
         #result-box { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; display: none; }
-        .data-field { margin-bottom: 8px; }
-        .label { font-weight: bold; }
-        #raw-text { white-space: pre-wrap; font-family: monospace; }
-        #github-link { text-align: center; margin-top: 20px; font-size: 0.9em; }
+        .data-field { margin-bottom: 8px; font-size: 18px; }
+        .label { font-weight: bold; color: #444; }
+        #raw-text { white-space: pre-wrap; font-family: monospace; font-size: 14px; background: #fff; padding: 10px; border: 1px solid #ddd;}
     </style>
 </head>
 <body>
@@ -25,77 +26,100 @@
     <h1>電錶數據辨識</h1>
 
     <div id="meter-container">
-        <!-- 電錶圖片及其周圍牆面 -->
-        <img id="meter-img" src="messageImage_1783042161693.jpg" alt="電錶圖片">
-        <!-- 模擬最下面的房間號 -->
-        <div id="room-label">R0602</div>
-        <button onclick="startOCR()">開始辨識</button>
+        <!-- 檔案上傳元件 -->
+        <div class="upload-area">
+            <input type="file" id="uploader" accept="image/*">
+        </div>
+        
+        <!-- 預覽圖片 -->
+        <img id="meter-img" alt="電錶圖片預覽">
+        
+        <!-- 執行按鈕 (預設禁用，上傳圖片後啟用) -->
+        <button id="start-btn" onclick="startOCR()" disabled>請先選擇圖片檔案</button>
     </div>
 
     <div id="result-box">
         <h2>辨識結果</h2>
-        <div class="data-field"><span class="label">5位數度數 (kWh):</span> <span id="kwh-value">辨識中...</span></div>
-        <div class="data-field"><span class="label">房間號 (R-code):</span> <span id="room-value">辨識中...</span></div>
+        <div class="data-field"><span class="label">5位數度數 (kWh):</span> <span id="kwh-value" style="color: blue;">等待中...</span></div>
+        <div class="data-field"><span class="label">房間號 (R-code):</span> <span id="room-value" style="color: green;">等待中...</span></div>
         <hr>
         <h3>完整原始文字</h3>
         <p id="raw-text"></p>
     </div>
 
-    <div id="github-link"><a href="https://github.com/Tesseract-Demo/electric-meter-ocr" target="_blank">查看 GitHub 專案庫</a></div>
-
     <script>
-        // 設定圖片物件，此圖片為本專案的靜態資源
+        const uploader = document.getElementById('uploader');
         const imgElement = document.getElementById('meter-img');
+        const startBtn = document.getElementById('start-btn');
         const kwhValue = document.getElementById('kwh-value');
         const roomValue = document.getElementById('room-value');
         const resultBox = document.getElementById('result-box');
         const rawText = document.getElementById('raw-text');
 
+        // 監聽檔案上傳事件
+        uploader.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // 將使用者選取的檔案轉換為瀏覽器可讀取的 URL 來預覽
+                imgElement.src = URL.createObjectURL(file);
+                imgElement.style.display = 'block'; 
+                
+                // 啟用辨識按鈕
+                startBtn.disabled = false;
+                startBtn.innerText = "開始辨識";
+                
+                // 隱藏之前的結果
+                resultBox.style.display = 'none';
+            }
+        });
+
         // 開始 OCR 辨識的函數
         async function startOCR() {
-            // 顯示結果區域並初始化狀態
+            if (!imgElement.src) return;
+
+            // 初始化 UI 狀態
             resultBox.style.display = 'block';
-            kwhValue.innerText = "辨識中...";
-            roomValue.innerText = "辨識中...";
-            rawText.innerText = "";
+            startBtn.disabled = true;
+            startBtn.innerText = "辨識中，這可能需要幾秒鐘...";
+            kwhValue.innerText = "計算中...";
+            roomValue.innerText = "計算中...";
+            rawText.innerText = "讀取圖片內容中...";
 
             try {
-                // 使用 Tesseract.js 的核心 recognize 函數，設定多語言模式
+                // 呼叫 Tesseract 引擎
                 const { data: { text } } = await Tesseract.recognize(
                     imgElement,
-                    'eng+chi_tra', // 英文+繁體中文，適用於電錶標籤
-                    { logger: m => console.log(m) } // 在控制台顯示進度
+                    'eng+chi_tra', 
+                    { logger: m => console.log('辨識進度:', Math.round(m.progress * 100) + '%') }
                 );
 
-                // 將完整原始文字顯示在介面上
                 rawText.innerText = text;
 
-                // --- 資料擷取邏輯 ---
-
-                // 1. 擷取「5位數度數」: 尋找第一個符合連續5位數字的字串
+                // --- 實務解析邏輯 ---
+                // 1. 抓 5位數字
                 const kwhMatch = text.match(/\b\d{5}\b/);
                 if (kwhMatch) {
                     kwhValue.innerText = kwhMatch[0];
                 } else {
-                    kwhValue.innerText = "未找到符合格式的5位數";
+                    kwhValue.innerText = "未找到5位數格式";
                 }
 
-                // 2. 擷取「房間號」: 尋找最後一個最大的純數字區塊 (R0602的數字部分)
-                // 先過濾出純數字，然後選擇最後一個，這通常是房間號
+                // 2. 抓房間號碼 (抓取文本中最後一組數字)
                 const allNumbers = text.match(/\d+/g);
                 if (allNumbers && allNumbers.length > 0) {
                     const lastNumberGroup = allNumbers[allNumbers.length - 1];
-                    // 在房間號前加上 'R'，重現原本的編碼結構
                     roomValue.innerText = 'R' + lastNumberGroup; 
                 } else {
                     roomValue.innerText = "未找到房間編號數字";
                 }
 
             } catch (error) {
-                console.error("OCR 辨識發生錯誤:", error);
-                kwhValue.innerText = "辨識失敗";
-                roomValue.innerText = "辨識失敗";
+                console.error("OCR 錯誤:", error);
                 rawText.innerText = "發生錯誤：\n" + error.message;
+            } finally {
+                // 執行完畢，恢復按鈕狀態
+                startBtn.disabled = false;
+                startBtn.innerText = "重新辨識";
             }
         }
     </script>
